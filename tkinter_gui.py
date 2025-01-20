@@ -110,7 +110,41 @@ class MacananGame:
             return
 
         if self.macan_can_move:
-            self.handle_mixed_phase(row, col)
+            if self.turn == "macan":
+                if self.selected_piece is None:
+                    if self.board[row][col] == "macan":
+                        self.selected_piece = (row, col)
+                        self.highlight_piece(row, col)
+                else:
+                    # Check if the clicked position is the same as the selected piece
+                    if self.selected_piece == (row, col):
+                        # Deselect the piece
+                        self.selected_piece = None
+                        self.redraw_board()
+                    else:
+                        self.handle_macan_movement(row, col)
+            else:  # Uwong's turn
+                if self.board[row][col] is None and self.uwong_count < 8:
+                    self.place_piece(row, col, "uwong")
+                    self.uwong_count += 1
+                    self.turn = "macan"
+                    self.status_label.config(text="Macan's turn")
+                elif self.selected_piece is None and self.board[row][col] == "uwong":
+                    self.selected_piece = (row, col)
+                    self.highlight_piece(row, col)
+                elif self.selected_piece is not None:
+                    # Check if the clicked position is the same as the selected piece
+                    if self.selected_piece == (row, col):
+                        # Deselect the piece
+                        self.selected_piece = None
+                        self.redraw_board()
+                    else:
+                        self.handle_uwong_movement(row, col)
+
+                # Check win conditions
+                if not self.check_macan_has_moves():
+                    messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                    self.restart_game()
         else:
             self.handle_placement(row, col)
 
@@ -198,6 +232,13 @@ class MacananGame:
         self.move_piece(old_row, old_col, new_row, new_col)
 
     def handle_mixed_phase(self, row, col):
+        # Check for Macan's available moves at the start of Macan's turn
+        if self.turn == "macan" and not self.selected_piece:
+            if not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
+                return
+
         if self.turn == "macan":
             if self.selected_piece is None:
                 if self.board[row][col] == "macan":
@@ -216,7 +257,8 @@ class MacananGame:
                 self.highlight_piece(row, col)
             elif self.selected_piece is not None:
                 self.handle_uwong_movement(row, col)
-                
+
+            # Check win conditions
             if not self.check_macan_has_moves():
                 messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
                 self.restart_game()
@@ -245,42 +287,53 @@ class MacananGame:
             self.status_label.config(text="Macan's turn to move")
 
     def check_macan_has_moves(self):
-        """Check if any Macan piece has valid moves available"""
+        """
+        Check if any Macan piece has valid moves available,
+        following all movement rules (4-direction on gray, 8-direction on white)
+        """
         for macan_pos in self.macan_positions:
             row, col = macan_pos
+            current_pos = (row, col)
             
-            # Check all adjacent positions (including diagonals)
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0:
-                        continue
-                        
-                    new_row = row + dr
-                    new_col = col + dc
-                    
-                    # Check if the new position is within bounds
-                    if 0 <= new_row < self.board_size and 0 <= new_col < self.board_size:
-                        # Check if normal move is possible
-                        if self.is_valid_move(row, col, new_row, new_col):
-                            return True
-                            
-                        # Check for possible captures
-                        # Extend the same direction for capture moves
-                        capture_row = new_row + 2 * dr
-                        capture_col = new_col + 2 * dc
-                        
-                        if (0 <= capture_row < self.board_size and 
-                            0 <= capture_col < self.board_size and 
-                            self.can_capture(row, col, capture_row, capture_col)):
-                            return True
-                            
-            # Check for longer capture opportunities (3 spaces away)
-            for direction in [(0, 1), (1, 0), (1, 1), (1, -1)]:  # Horizontal, vertical, and diagonal
-                dr, dc = direction
-                for multiplier in [-3, 3]:  # Check both directions
-                    new_row = row + dr * multiplier
-                    new_col = col + dc * multiplier
-                    
+            # First check regular moves based on position type
+            if current_pos in self.restricted_positions:
+                # On gray square - can only move orthogonally
+                directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # Right, Down, Left, Up
+            else:
+                # On white square - can move in all 8 directions
+                directions = [(0, 1), (1, 1), (1, 0), (1, -1),   # Right, Down-Right, Down, Down-Left
+                            (0, -1), (-1, -1), (-1, 0), (-1, 1)] # Left, Up-Left, Up, Up-Right
+
+            # Check regular one-step moves
+            for dr, dc in directions:
+                new_row = row + dr
+                new_col = col + dc
+                
+                if (0 <= new_row < self.board_size and 
+                    0 <= new_col < self.board_size and 
+                    self.is_valid_move(row, col, new_row, new_col)):
+                    return True
+            
+            # Check capture moves
+            # Horizontal captures (3 spaces)
+            for col_offset in [-3, 3]:
+                new_col = col + col_offset
+                if (0 <= new_col < self.board_size and 
+                    self.can_capture(row, col, row, new_col)):
+                    return True
+            
+            # Vertical captures (3 spaces)
+            for row_offset in [-3, 3]:
+                new_row = row + row_offset
+                if (0 <= new_row < self.board_size and 
+                    self.can_capture(row, col, new_row, col)):
+                    return True
+            
+            # Diagonal captures (3 spaces)
+            for row_offset in [-3, 3]:
+                for col_offset in [-3, 3]:
+                    new_row = row + row_offset
+                    new_col = col + col_offset
                     if (0 <= new_row < self.board_size and 
                         0 <= new_col < self.board_size and 
                         self.can_capture(row, col, new_row, new_col)):
