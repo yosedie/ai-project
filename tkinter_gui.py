@@ -6,14 +6,33 @@ class MacananGame:
         self.root = root
         self.root.title("Macanan Game")
         
+        # Add movement rules explanation
+        rules_frame = tk.Frame(root)
+        rules_frame.pack(pady=5)
+        
+        # Add legend for movement rules
+        gray_square = tk.Canvas(rules_frame, width=20, height=20)
+        gray_square.grid(row=0, column=0, padx=5)
+        gray_square.create_rectangle(0, 0, 20, 20, fill="lightgray", outline="black")
+        
+        gray_label = tk.Label(rules_frame, text="= 4 directions movement (↑→↓←)", font=('Arial', 10))
+        gray_label.grid(row=0, column=1, padx=5, sticky="w")
+        
+        white_square = tk.Canvas(rules_frame, width=20, height=20)
+        white_square.grid(row=1, column=0, padx=5)
+        white_square.create_rectangle(0, 0, 20, 20, fill="white", outline="black")
+        
+        white_label = tk.Label(rules_frame, text="= 8 directions movement (↑↗→↘↓↙←↖)", font=('Arial', 10))
+        white_label.grid(row=1, column=1, padx=5, sticky="w")
+        
         # Game board configuration
         self.board_size = 5
         self.cell_size = 80
         self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, 
-                              height=self.board_size * self.cell_size)
+                            height=self.board_size * self.cell_size)
         self.canvas.pack(pady=10)
         
-        # Define restricted movement positions (gray cells)
+        # Rest of the initialization code remains the same
         self.restricted_positions = {
             (1,0), (3,0),  # Row 0
             (0,1), (2,1), (4,1),  # Row 1
@@ -275,12 +294,18 @@ class MacananGame:
             self.move_piece(old_row, old_col, row, col)
             self.turn = "uwong"
             self.status_label.config(text="Uwong's turn")
+
+            self.selected_piece = None
+            self.redraw_board()
                 
         elif self.can_capture(old_row, old_col, row, col):
             self.capture_uwong(old_row, old_col, row, col)
             self.turn = "uwong"
             self.status_label.config(text="Uwong's turn")
             
+            self.selected_piece = None
+            self.redraw_board()
+
             # Check win conditions
             if self.count_uwong() < 3:
                 messagebox.showinfo("Game Over", "Macan wins!")
@@ -288,9 +313,6 @@ class MacananGame:
             elif not self.check_macan_has_moves():
                 messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
                 self.restart_game()
-        
-        self.selected_piece = None
-        self.redraw_board()
 
     def handle_uwong_movement(self, row, col):
         old_row, old_col = self.selected_piece
