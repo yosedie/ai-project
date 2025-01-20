@@ -179,6 +179,9 @@ class MacananGame:
         self.move_piece(old_row, old_col, new_row, new_col)
 
     def handle_mixed_phase(self, row, col):
+        if not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
         if self.turn == "macan":
             if self.selected_piece is None:
                 if self.board[row][col] == "macan":
@@ -221,6 +224,50 @@ class MacananGame:
             self.turn = "macan"
             self.status_label.config(text="Macan's turn to move")
 
+    def check_macan_has_moves(self):
+        """Check if any Macan piece has valid moves available"""
+        for macan_pos in self.macan_positions:
+            row, col = macan_pos
+            
+            # Check all adjacent positions (including diagonals)
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                        
+                    new_row = row + dr
+                    new_col = col + dc
+                    
+                    # Check if the new position is within bounds
+                    if 0 <= new_row < self.board_size and 0 <= new_col < self.board_size:
+                        # Check if normal move is possible
+                        if self.is_valid_move(row, col, new_row, new_col):
+                            return True
+                            
+                        # Check for possible captures
+                        # Extend the same direction for capture moves
+                        capture_row = new_row + 2 * dr
+                        capture_col = new_col + 2 * dc
+                        
+                        if (0 <= capture_row < self.board_size and 
+                            0 <= capture_col < self.board_size and 
+                            self.can_capture(row, col, capture_row, capture_col)):
+                            return True
+                            
+            # Check for longer capture opportunities (3 spaces away)
+            for direction in [(0, 1), (1, 0), (1, 1), (1, -1)]:  # Horizontal, vertical, and diagonal
+                dr, dc = direction
+                for multiplier in [-3, 3]:  # Check both directions
+                    new_row = row + dr * multiplier
+                    new_col = col + dc * multiplier
+                    
+                    if (0 <= new_row < self.board_size and 
+                        0 <= new_col < self.board_size and 
+                        self.can_capture(row, col, new_row, new_col)):
+                        return True
+        
+        return False
+
     def handle_macan_movement(self, row, col):
         old_row, old_col = self.selected_piece
         
@@ -228,13 +275,18 @@ class MacananGame:
             self.move_piece(old_row, old_col, row, col)
             self.turn = "uwong"
             self.status_label.config(text="Uwong's turn")
+                
         elif self.can_capture(old_row, old_col, row, col):
             self.capture_uwong(old_row, old_col, row, col)
             self.turn = "uwong"
             self.status_label.config(text="Uwong's turn")
             
+            # Check win conditions
             if self.count_uwong() < 3:
                 messagebox.showinfo("Game Over", "Macan wins!")
+                self.restart_game()
+            elif not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
                 self.restart_game()
         
         self.selected_piece = None
