@@ -198,9 +198,6 @@ class MacananGame:
         self.move_piece(old_row, old_col, new_row, new_col)
 
     def handle_mixed_phase(self, row, col):
-        if not self.check_macan_has_moves():
-                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
-                self.restart_game()
         if self.turn == "macan":
             if self.selected_piece is None:
                 if self.board[row][col] == "macan":
@@ -219,6 +216,10 @@ class MacananGame:
                 self.highlight_piece(row, col)
             elif self.selected_piece is not None:
                 self.handle_uwong_movement(row, col)
+                
+            if not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
 
     def handle_placement(self, row, col):
         if self.board[row][col] is not None:
