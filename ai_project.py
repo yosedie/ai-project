@@ -409,6 +409,11 @@ class MainMenu:
                             width=20, height=2, font=('Arial', 12))
         play_1v1.pack(pady=10)
         
+        play_ai_vs_ai = tk.Button(self.menu_frame, text="AI vs AI", 
+                                command=lambda: self.start_game(4),
+                                width=20, height=2, font=('Arial', 12))
+        play_ai_vs_ai.pack(pady=10)
+        
         self.game_frame = None
         self.game = None
 
@@ -497,6 +502,8 @@ class MacananGame:
 
         if self.mode == 2:
             self.parent.after(500, self.make_ai_move)
+        elif self.mode == 4:
+            self.parent.after(500, self.make_ai_vs_ai_move)
         
         self.canvas.bind("<Button-1>", self.handle_click)
         self.selected_piece = None
@@ -552,6 +559,60 @@ class MacananGame:
                     self.status_label.config(text="Uwong's turn")
         
         self.redraw_board()
+        
+    def make_ai_vs_ai_move(self):
+        # Pastikan peletakan pion selesai sebelum permainan lanjut ke pergerakan
+        if self.turn == "macan":
+            if self.macan_count < 2:  # Placement phase for Macan
+                best_move = self.ai.get_best_placement(self.board, self.macan_positions, 
+                                                        True, self.macan_count, self.uwong_count)
+                if best_move:
+                    row, col = best_move
+                    self.place_piece(row, col, "macan")
+                    self.macan_positions.append((row, col))
+                    self.macan_count += 1
+                    self.turn = "uwong"  # Switch to Uwong's turn
+            elif self.macan_count == 2:  # Movement phase for Macan
+                best_move = self.ai.get_best_move(self.board, self.macan_positions, True)
+                if best_move:
+                    old_pos, new_pos = best_move
+                    if self.can_capture(old_pos[0], old_pos[1], new_pos[0], new_pos[1]):
+                        self.capture_uwong(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    else:
+                        self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    self.turn = "uwong"  # Switch to Uwong's turn
+
+        elif self.turn == "uwong":
+            if self.uwong_count < 8:  # Placement phase for Uwong
+                best_move = self.ai.get_best_placement(self.board, self.macan_positions, 
+                                                        False, self.macan_count, self.uwong_count)
+                if best_move:
+                    row, col = best_move
+                    self.place_piece(row, col, "uwong")
+                    self.uwong_count += 1
+                    self.turn = "macan"  # Switch to Macan's turn
+            elif self.uwong_count == 8:  # Movement phase for Uwong
+                best_move = self.ai.get_best_move(self.board, self.macan_positions, False)
+                if best_move:
+                    old_pos, new_pos = best_move
+                    self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    self.turn = "macan"  # Switch to Macan's turn
+
+        self.redraw_board()
+
+        # Jangan periksa kemenangan selama fase peletakan
+        if self.macan_count == 2 and self.uwong_count == 8:  # Setelah semua pion dipasang, baru cek kemenangan
+            # Periksa kondisi akhir permainan
+            if self.count_uwong() < 3:
+                messagebox.showinfo("Game Over", "Macan wins!")
+                self.restart_game()
+            elif not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
+
+        # Terus jalankan langkah berikutnya setelah jeda waktu
+        else:
+            self.parent.after(500, self.make_ai_vs_ai_move)
 
     def return_to_menu(self):
         if hasattr(self, 'status_label'):  # Ensure it exists
