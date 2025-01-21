@@ -11,19 +11,19 @@ class MacananGame:
         rules_frame.pack(pady=5)
         
         # Add legend for movement rules
-        gray_square = tk.Canvas(rules_frame, width=20, height=20)
-        gray_square.grid(row=0, column=0, padx=5)
-        gray_square.create_rectangle(0, 0, 20, 20, fill="lightgray", outline="black")
+        # gray_square = tk.Canvas(rules_frame, width=20, height=20)
+        # gray_square.grid(row=0, column=0, padx=5)
+        # gray_square.create_rectangle(0, 0, 20, 20, fill="lightgray", outline="black")
         
-        gray_label = tk.Label(rules_frame, text="= 4 directions movement (↑→↓←)", font=('Arial', 10))
-        gray_label.grid(row=0, column=1, padx=5, sticky="w")
+        # gray_label = tk.Label(rules_frame, text="= 4 directions movement (↑→↓←)", font=('Arial', 10))
+        # gray_label.grid(row=0, column=1, padx=5, sticky="w")
         
-        white_square = tk.Canvas(rules_frame, width=20, height=20)
-        white_square.grid(row=1, column=0, padx=5)
-        white_square.create_rectangle(0, 0, 20, 20, fill="white", outline="black")
+        # white_square = tk.Canvas(rules_frame, width=20, height=20)
+        # white_square.grid(row=1, column=0, padx=5)
+        # white_square.create_rectangle(0, 0, 20, 20, fill="white", outline="black")
         
-        white_label = tk.Label(rules_frame, text="= 8 directions movement (↑↗→↘↓↙←↖)", font=('Arial', 10))
-        white_label.grid(row=1, column=1, padx=5, sticky="w")
+        # white_label = tk.Label(rules_frame, text="= 8 directions movement (↑↗→↘↓↙←↖)", font=('Arial', 10))
+        # white_label.grid(row=1, column=1, padx=5, sticky="w")
         
         # Game board configuration
         self.board_size = 5
@@ -83,9 +83,24 @@ class MacananGame:
                 y1 = i * self.cell_size
                 x2 = x1 + self.cell_size
                 y2 = y1 + self.cell_size
-                # Use gray for restricted movement positions
-                fill_color = "lightgray" if (i,j) in self.restricted_positions else "white"
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=fill_color, outline="black")
+                
+                # # Determine cell color based on restricted positions
+                # fill_color = "lightgray" if (i, j) in self.restricted_positions else "white"
+                # self.canvas.create_rectangle(x1, y1, x2, y2, fill=fill_color, outline="black")
+                
+                # Determine movement pattern
+                if (i, j) not in self.restricted_positions:  # 8-directional movement
+                    # Draw diagonal lines (8 directions)
+                    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                    self.canvas.create_line(cx, cy, x1, y1, fill="black")  # Top-left
+                    self.canvas.create_line(cx, cy, x2, y1, fill="black")  # Top-right
+                    self.canvas.create_line(cx, cy, x1, y2, fill="black")  # Bottom-left
+                    self.canvas.create_line(cx, cy, x2, y2, fill="black")  # Bottom-right
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                self.canvas.create_line(cx, cy, cx, y1, fill="black")  # Up
+                self.canvas.create_line(cx, cy, cx, y2, fill="black")  # Down
+                self.canvas.create_line(cx, cy, x1, cy, fill="black")  # Left
+                self.canvas.create_line(cx, cy, x2, cy, fill="black")  # Right
 
     # Rest of the code remains the same as before
     def reset_game(self):
