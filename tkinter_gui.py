@@ -1,14 +1,234 @@
 import tkinter as tk
 from tkinter import messagebox
 
-class MacananGame:
+class MacananAI:
+    def __init__(self, board_size=5):
+        self.board_size = board_size
+        self.restricted_positions = {
+            (1,0), (3,0),  # Row 0
+            (0,1), (2,1), (4,1),  # Row 1
+            (1,2), (3,2),  # Row 2
+            (0,3), (2,3), (4,3),  # Row 3
+            (1,4), (3,4)  # Row 4
+        }
+
+    def evaluate_board(self, board, macan_positions):
+        """
+        Evaluate the current board state
+        Positive score favors Macan, negative score favors Uwong
+        """
+        uwong_count = sum(row.count("uwong") for row in board)
+        
+        # Check if game is won
+        if uwong_count < 3:
+            return 1000  # Macan wins
+        if not self.has_valid_moves(board, macan_positions):
+            return -1000  # Uwong wins
+            
+        # Otherwise evaluate based on piece count and positions
+        score = (8 - uwong_count) * 10  # Value each remaining Uwong capture
+        
+        # Add positional values
+        for pos in macan_positions:
+            if pos in self.restricted_positions:
+                score -= 5  # Penalty for Macan in restricted position
+                
+        return score
+
+    def get_valid_moves(self, board, pos, piece_type, macan_positions):
+        """Return all valid moves for a piece at given position"""
+        row, col = pos
+        moves = []
+        
+        # Regular moves
+        if pos in self.restricted_positions:
+            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # 4 directions
+        else:
+            directions = [(0, 1), (1, 1), (1, 0), (1, -1),   # 8 directions
+                        (0, -1), (-1, -1), (-1, 0), (-1, 1)]
+            
+        for dr, dc in directions:
+            new_row, new_col = row + dr, col + dc
+            if (0 <= new_row < self.board_size and 
+                0 <= new_col < self.board_size and 
+                board[new_row][new_col] is None):
+                moves.append((new_row, new_col))
+        
+        # Add capture moves for Macan
+        if piece_type == "macan":
+            capture_moves = self.get_capture_moves(board, pos)
+            moves.extend(capture_moves)
+            
+        return moves
+
+    def get_capture_moves(self, board, pos):
+        """Get all possible capture moves for Macan"""
+        row, col = pos
+        captures = []
+        
+        # Check horizontal captures
+        for col_offset in [-3, 3]:
+            new_col = col + col_offset
+            if (0 <= new_col < self.board_size and 
+                self.can_capture(board, row, col, row, new_col)):
+                captures.append((row, new_col))
+        
+        # Check vertical captures
+        for row_offset in [-3, 3]:
+            new_row = row + row_offset
+            if (0 <= new_row < self.board_size and 
+                self.can_capture(board, row, col, new_row, col)):
+                captures.append((new_row, col))
+        
+        # Check diagonal captures
+        for row_offset in [-3, 3]:
+            for col_offset in [-3, 3]:
+                new_row, new_col = row + row_offset, col + col_offset
+                if (0 <= new_row < self.board_size and 
+                    0 <= new_col < self.board_size and 
+                    self.can_capture(board, row, col, new_row, new_col)):
+                    captures.append((new_row, new_col))
+                    
+        return captures
+
+    def can_capture(self, board, old_row, old_col, new_row, new_col):
+        """Check if a capture move is valid"""
+        if board[new_row][new_col] is not None:
+            return False
+
+        # For horizontal captures
+        if old_row == new_row:
+            min_col = min(old_col, new_col)
+            max_col = max(old_col, new_col)
+            if max_col - min_col == 3:
+                uwong_count = 0
+                for col in range(min_col + 1, max_col):
+                    if board[old_row][col] == "uwong":
+                        uwong_count += 1
+                    elif board[old_row][col] == "macan":
+                        return False
+                return uwong_count == 2
+
+        # Similar logic for vertical and diagonal captures
+        # [Keep the existing capture logic from the MacananGame class]
+        
+        return False
+
+    def minimax(self, board, macan_positions, depth, alpha, beta, is_maximizing, is_macan_ai):
+        """
+        Minimax algorithm with alpha-beta pruning
+        is_macan_ai: True if AI is playing as Macan, False if playing as Uwong
+        """
+        if depth == 0:
+            return self.evaluate_board(board, macan_positions), None
+            
+        if is_maximizing:
+            best_score = float('-inf')
+            best_move = None
+            
+            # Get all possible moves for the current player
+            if is_macan_ai:
+                for pos in macan_positions:
+                    moves = self.get_valid_moves(board, pos, "macan", macan_positions)
+                    for move in moves:
+                        # Make move
+                        new_board = [row[:] for row in board]
+                        new_macan_positions = macan_positions.copy()
+                        # [Implement move logic]
+                        
+                        score, _ = self.minimax(new_board, new_macan_positions, 
+                                             depth - 1, alpha, beta, False, is_macan_ai)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_move = (pos, move)
+                            
+                        alpha = max(alpha, best_score)
+                        if beta <= alpha:
+                            break
+            else:
+                # Logic for Uwong's moves
+                # [Similar implementation for Uwong]
+                pass
+                
+            return best_score, best_move
+        else:
+            # Minimizing player's logic
+            # [Implement minimizing logic similar to maximizing]
+            pass
+
+    def get_best_move(self, board, macan_positions, is_macan_ai):
+        """Get the best move using minimax"""
+        _, best_move = self.minimax(board, macan_positions, depth=3, 
+                                  alpha=float('-inf'), beta=float('inf'), 
+                                  is_maximizing=True, is_macan_ai=is_macan_ai)
+        return best_move
+
+class MainMenu:
     def __init__(self, root):
         self.root = root
         self.root.title("Macanan Game")
         
+        # Create main menu frame
+        self.menu_frame = tk.Frame(root)
+        self.menu_frame.pack(expand=True, pady=20)
+        
+        # Title
+        title_label = tk.Label(self.menu_frame, text="Macanan Game", font=('Arial', 24, 'bold'))
+        title_label.pack(pady=20)
+        
+        # Menu buttons
+        play_as_macan = tk.Button(self.menu_frame, text="Play as Macan", 
+                                 command=lambda: self.start_game(1),
+                                 width=20, height=2, font=('Arial', 12))
+        play_as_macan.pack(pady=10)
+        
+        play_as_uwong = tk.Button(self.menu_frame, text="Play as Uwong",
+                                 command=lambda: self.start_game(2),
+                                 width=20, height=2, font=('Arial', 12))
+        play_as_uwong.pack(pady=10)
+        
+        play_1v1 = tk.Button(self.menu_frame, text="1 vs 1",
+                            command=lambda: self.start_game(3),
+                            width=20, height=2, font=('Arial', 12))
+        play_1v1.pack(pady=10)
+        
+        self.game_frame = None
+        self.game = None
+
+    def start_game(self, mode):
+        # Hide menu frame
+        self.menu_frame.pack_forget()
+        
+        # Create and show game frame
+        self.game_frame = tk.Frame(self.root)
+        self.game_frame.pack(expand=True)
+        
+        # Create game instance
+        self.game = MacananGame(self.game_frame, mode, self.return_to_menu)
+
+    def return_to_menu(self):
+        # Destroy game frame
+        if self.game_frame:
+            self.game_frame.destroy()
+        
+        # Show menu frame
+        self.menu_frame.pack(expand=True)
+
+class MacananGame:
+    def __init__(self, parent, mode, return_callback):
+        self.parent = parent
+        self.mode = mode  # 1: Play as Macan, 2: Play as Uwong, 3: 1v1
+        self.ai = MacananAI()
+        self.is_ai_turn = False
+        self.return_callback = return_callback  
+        
+        self.board_size = 5
+        self.cell_size = 80
+
         # Add movement rules explanation
-        rules_frame = tk.Frame(root)
-        rules_frame.pack(pady=5)
+        self.game_frame = tk.Frame(parent)
+        self.game_frame.pack(pady=10)
         
         # Add legend for movement rules
         # gray_square = tk.Canvas(rules_frame, width=20, height=20)
@@ -25,11 +245,9 @@ class MacananGame:
         # white_label = tk.Label(rules_frame, text="= 8 directions movement (↑↗→↘↓↙←↖)", font=('Arial', 10))
         # white_label.grid(row=1, column=1, padx=5, sticky="w")
         
-        # Game board configuration
-        self.board_size = 5
-        self.cell_size = 80
-        self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, 
-                            height=self.board_size * self.cell_size)
+        self.canvas = tk.Canvas(self.game_frame, 
+                              width=self.board_size * self.cell_size,
+                              height=self.board_size * self.cell_size)
         self.canvas.pack(pady=10)
         
         # Rest of the initialization code remains the same
@@ -45,15 +263,59 @@ class MacananGame:
         self.status_label = tk.Label(root, text="Start game - Macan's turn", font=('Arial', 12))
         self.status_label.pack(pady=5)
         
-        # Add restart button
-        self.restart_button = tk.Button(root, text="Restart Game", command=self.restart_game)
-        self.restart_button.pack(pady=5)
+        # Button frame
+        button_frame = tk.Frame(self.game_frame)
+        button_frame.pack(pady=5)
+        
+        # Add restart and quit buttons
+        self.restart_button = tk.Button(button_frame, text="Restart Game", 
+                                      command=self.restart_game)
+        self.restart_button.pack(side=tk.LEFT, padx=5)
+        
+        self.quit_button = tk.Button(button_frame, text="Back to Menu", 
+                                   command=self.return_to_menu)
+        self.quit_button.pack(side=tk.LEFT, padx=5)
         
         self.reset_game()
         self.draw_board()
         
         self.canvas.bind("<Button-1>", self.handle_click)
         self.selected_piece = None
+
+    def make_ai_move(self):
+        """Make AI move based on current game state"""
+        if self.mode == 1:  # AI plays as Uwong
+            if self.uwong_count < 8:
+                # AI placement phase
+                # [Implement placement strategy]
+                pass
+            else:
+                # AI movement phase
+                best_move = self.ai.get_best_move(self.board, self.macan_positions, False)
+                if best_move:
+                    old_pos, new_pos = best_move
+                    self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    
+        elif self.mode == 2:  # AI plays as Macan
+            if self.macan_count < 2:
+                # AI placement phase
+                # [Implement placement strategy]
+                pass
+            else:
+                # AI movement phase
+                best_move = self.ai.get_best_move(self.board, self.macan_positions, True)
+                if best_move:
+                    old_pos, new_pos = best_move
+                    if self.can_capture(old_pos[0], old_pos[1], new_pos[0], new_pos[1]):
+                        self.capture_uwong(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    else:
+                        self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+
+    def return_to_menu(self):
+        if hasattr(self, 'status_label'):  # Ensure it exists
+            self.status_label.destroy() 
+        self.game_frame.destroy()
+        self.return_callback()
 
     def is_valid_move(self, old_row, old_col, new_row, new_col):
         if self.board[new_row][new_col] is not None:
@@ -162,6 +424,11 @@ class MacananGame:
                     self.restart_game()
         else:
             self.handle_placement(row, col)
+        
+        if self.mode in [1, 2] and not self.is_ai_turn:
+            self.is_ai_turn = True
+            self.parent.after(500, self.make_ai_move)  # Delay AI move for better UX
+            self.is_ai_turn = False
 
     def can_capture(self, old_row, old_col, new_row, new_col):
         if self.board[new_row][new_col] is not None:
@@ -430,5 +697,5 @@ class MacananGame:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    game = MacananGame(root)
+    menu = MainMenu(root)
     root.mainloop()
