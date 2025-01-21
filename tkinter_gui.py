@@ -12,6 +12,126 @@ class MacananAI:
             (1,4), (3,4)  # Row 4
         }
 
+    def has_valid_moves(self, board, macan_positions):
+        """Check if Macan has any valid moves available"""
+        for pos in macan_positions:
+            row, col = pos
+            # Check regular moves
+            moves = self.get_valid_moves(board, pos, "macan", macan_positions)
+            if moves:
+                return True
+        return False
+
+    def evaluate_placement(self, board, macan_positions, is_macan_ai):
+        """Evaluate board state during placement phase"""
+        score = 0
+        if is_macan_ai:
+            # Prefer central positions for Macan
+            for pos in macan_positions:
+                row, col = pos
+                # Center positions are worth more
+                score += (2 - abs(row - 2)) + (2 - abs(col - 2))
+                # Avoid restricted positions during placement
+                if pos in self.restricted_positions:
+                    score -= 3
+        else:
+            # For Uwong, try to block Macan's movements
+            uwong_positions = [(i, j) for i in range(self.board_size) 
+                            for j in range(self.board_size) 
+                            if board[i][j] == "uwong"]
+            for pos in uwong_positions:
+                # Position Uwong pieces to restrict Macan movement
+                for macan_pos in macan_positions:
+                    if abs(pos[0] - macan_pos[0]) + abs(pos[1] - macan_pos[1]) == 1:
+                        score += 2
+        return score
+
+    def get_placement_moves(self, board):
+        """Get all possible placement positions"""
+        moves = []
+        for i in range(self.board_size):
+            for j in range(self.board_size):
+                if board[i][j] is None:
+                    moves.append((i, j))
+        return moves
+
+    def minimax_placement(self, board, macan_positions, depth, alpha, beta, 
+                        is_maximizing, is_macan_ai, macan_count, uwong_count):
+        """Minimax algorithm for placement phase"""
+        if depth == 0:
+            return self.evaluate_placement(board, macan_positions, is_macan_ai), None
+            
+        if is_maximizing:
+            best_score = float('-inf')
+            best_move = None
+            possible_moves = self.get_placement_moves(board)
+            
+            for move in possible_moves:
+                row, col = move
+                new_board = [row[:] for row in board]
+                new_macan_positions = macan_positions.copy()
+                
+                if is_macan_ai:
+                    new_board[row][col] = "macan"
+                    new_macan_positions.append(move)
+                    new_macan_count = macan_count + 1
+                else:
+                    new_board[row][col] = "uwong"
+                    new_uwong_count = uwong_count + 1
+                
+                score, _ = self.minimax_placement(new_board, new_macan_positions, 
+                                            depth - 1, alpha, beta, False, 
+                                            is_macan_ai, macan_count, uwong_count)
+                
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                    
+                alpha = max(alpha, best_score)
+                if beta <= alpha:
+                    break
+                    
+            return best_score, best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            possible_moves = self.get_placement_moves(board)
+            
+            for move in possible_moves:
+                row, col = move
+                new_board = [row[:] for row in board]
+                new_macan_positions = macan_positions.copy()
+                
+                if not is_macan_ai:
+                    new_board[row][col] = "macan"
+                    new_macan_positions.append(move)
+                    new_macan_count = macan_count + 1
+                else:
+                    new_board[row][col] = "uwong"
+                    new_uwong_count = uwong_count + 1
+                
+                score, _ = self.minimax_placement(new_board, new_macan_positions, 
+                                            depth - 1, alpha, beta, True, 
+                                            is_macan_ai, macan_count, uwong_count)
+                
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+                    
+                beta = min(beta, best_score)
+                if beta <= alpha:
+                    break
+                    
+            return best_score, best_move
+
+    def get_best_placement(self, board, macan_positions, is_macan_ai, macan_count, uwong_count):
+        """Get the best placement move"""
+        _, best_move = self.minimax_placement(board, macan_positions, depth=3,
+                                            alpha=float('-inf'), beta=float('inf'),
+                                            is_maximizing=True, is_macan_ai=is_macan_ai,
+                                            macan_count=macan_count, uwong_count=uwong_count)
+        return best_move
+
     def evaluate_board(self, board, macan_positions):
         """
         Evaluate the current board state
@@ -115,10 +235,6 @@ class MacananAI:
         return False
 
     def minimax(self, board, macan_positions, depth, alpha, beta, is_maximizing, is_macan_ai):
-        """
-        Minimax algorithm with alpha-beta pruning
-        is_macan_ai: True if AI is playing as Macan, False if playing as Uwong
-        """
         if depth == 0:
             return self.evaluate_board(board, macan_positions), None
             
@@ -126,7 +242,6 @@ class MacananAI:
             best_score = float('-inf')
             best_move = None
             
-            # Get all possible moves for the current player
             if is_macan_ai:
                 for pos in macan_positions:
                     moves = self.get_valid_moves(board, pos, "macan", macan_positions)
@@ -134,10 +249,21 @@ class MacananAI:
                         # Make move
                         new_board = [row[:] for row in board]
                         new_macan_positions = macan_positions.copy()
-                        # [Implement move logic]
+                        
+                        # Simulate move
+                        new_board[pos[0]][pos[1]] = None
+                        new_board[move[0]][move[1]] = "macan"
+                        new_macan_positions.remove(pos)
+                        new_macan_positions.append(move)
+                        
+                        # Check if this is a capture move
+                        if abs(move[0] - pos[0]) == 3 or abs(move[1] - pos[1]) == 3:
+                            # Remove captured Uwong pieces
+                            if self.can_capture(board, pos[0], pos[1], move[0], move[1]):
+                                self._apply_capture(new_board, pos[0], pos[1], move[0], move[1])
                         
                         score, _ = self.minimax(new_board, new_macan_positions, 
-                                             depth - 1, alpha, beta, False, is_macan_ai)
+                                            depth - 1, alpha, beta, False, is_macan_ai)
                         
                         if score > best_score:
                             best_score = score
@@ -147,15 +273,105 @@ class MacananAI:
                         if beta <= alpha:
                             break
             else:
-                # Logic for Uwong's moves
-                # [Similar implementation for Uwong]
-                pass
-                
+                # Uwong's moves
+                uwong_positions = [(i, j) for i in range(self.board_size) 
+                                for j in range(self.board_size) 
+                                if board[i][j] == "uwong"]
+                for pos in uwong_positions:
+                    moves = self.get_valid_moves(board, pos, "uwong", macan_positions)
+                    for move in moves:
+                        new_board = [row[:] for row in board]
+                        new_board[pos[0]][pos[1]] = None
+                        new_board[move[0]][move[1]] = "uwong"
+                        
+                        score, _ = self.minimax(new_board, macan_positions, 
+                                            depth - 1, alpha, beta, False, is_macan_ai)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_move = (pos, move)
+                            
+                        alpha = max(alpha, best_score)
+                        if beta <= alpha:
+                            break
+                    
             return best_score, best_move
         else:
-            # Minimizing player's logic
-            # [Implement minimizing logic similar to maximizing]
-            pass
+            # Minimizing player's logic (similar to maximizing but with min instead of max)
+            best_score = float('inf')
+            best_move = None
+            
+            if not is_macan_ai:
+                for pos in macan_positions:
+                    moves = self.get_valid_moves(board, pos, "macan", macan_positions)
+                    for move in moves:
+                        new_board = [row[:] for row in board]
+                        new_macan_positions = macan_positions.copy()
+                        
+                        # Simulate move
+                        new_board[pos[0]][pos[1]] = None
+                        new_board[move[0]][move[1]] = "macan"
+                        new_macan_positions.remove(pos)
+                        new_macan_positions.append(move)
+                        
+                        if abs(move[0] - pos[0]) == 3 or abs(move[1] - pos[1]) == 3:
+                            if self.can_capture(board, pos[0], pos[1], move[0], move[1]):
+                                self._apply_capture(new_board, pos[0], pos[1], move[0], move[1])
+                        
+                        score, _ = self.minimax(new_board, new_macan_positions, 
+                                            depth - 1, alpha, beta, True, is_macan_ai)
+                        
+                        if score < best_score:
+                            best_score = score
+                            best_move = (pos, move)
+                            
+                        beta = min(beta, best_score)
+                        if beta <= alpha:
+                            break
+            else:
+                uwong_positions = [(i, j) for i in range(self.board_size) 
+                                for j in range(self.board_size) 
+                                if board[i][j] == "uwong"]
+                for pos in uwong_positions:
+                    moves = self.get_valid_moves(board, pos, "uwong", macan_positions)
+                    for move in moves:
+                        new_board = [row[:] for row in board]
+                        new_board[pos[0]][pos[1]] = None
+                        new_board[move[0]][move[1]] = "uwong"
+                        
+                        score, _ = self.minimax(new_board, macan_positions, 
+                                            depth - 1, alpha, beta, True, is_macan_ai)
+                        
+                        if score < best_score:
+                            best_score = score
+                            best_move = (pos, move)
+                            
+                        beta = min(beta, best_score)
+                        if beta <= alpha:
+                            break
+                    
+            return best_score, best_move
+
+    def _apply_capture(self, board, old_row, old_col, new_row, new_col):
+        """Apply capture move on the board"""
+        if old_row == new_row:  # Horizontal capture
+            min_col = min(old_col, new_col)
+            max_col = max(old_col, new_col)
+            for col in range(min_col + 1, max_col):
+                board[old_row][col] = None
+        elif old_col == new_col:  # Vertical capture
+            min_row = min(old_row, new_row)
+            max_row = max(old_row, new_row)
+            for row in range(min_row + 1, max_row):
+                board[row][old_col] = None
+        else:  # Diagonal capture
+            row_step = 1 if new_row > old_row else -1
+            col_step = 1 if new_col > old_col else -1
+            row, col = old_row + row_step, old_col + col_step
+            for _ in range(2):
+                board[row][col] = None
+                row += row_step
+                col += col_step
 
     def get_best_move(self, board, macan_positions, is_macan_ai):
         """Get the best move using minimax"""
@@ -278,6 +494,9 @@ class MacananGame:
         
         self.reset_game()
         self.draw_board()
+
+        if self.mode == 2:
+            self.parent.after(500, self.make_ai_move)
         
         self.canvas.bind("<Button-1>", self.handle_click)
         self.selected_piece = None
@@ -285,24 +504,43 @@ class MacananGame:
     def make_ai_move(self):
         """Make AI move based on current game state"""
         if self.mode == 1:  # AI plays as Uwong
-            if self.uwong_count < 8:
-                # AI placement phase
-                # [Implement placement strategy]
-                pass
-            else:
-                # AI movement phase
+            if self.uwong_count < 8:  # Placement phase
+                best_move = self.ai.get_best_placement(self.board, self.macan_positions, 
+                                                    False, self.macan_count, self.uwong_count)
+                if best_move:
+                    row, col = best_move
+                    self.place_piece(row, col, "uwong")
+                    self.uwong_count += 1
+                    self.turn = "macan"
+                    self.status_label.config(text="Macan's turn")
+                    
+                    if self.uwong_count == 8:
+                        self.macan_can_move = True
+                        
+            elif self.uwong_count == 8:  # Movement phase
                 best_move = self.ai.get_best_move(self.board, self.macan_positions, False)
                 if best_move:
                     old_pos, new_pos = best_move
                     self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    self.turn = "macan"
+                    self.status_label.config(text="Macan's turn")
                     
         elif self.mode == 2:  # AI plays as Macan
-            if self.macan_count < 2:
-                # AI placement phase
-                # [Implement placement strategy]
-                pass
-            else:
-                # AI movement phase
+            if self.macan_count < 2:  # Placement phase
+                best_move = self.ai.get_best_placement(self.board, self.macan_positions, 
+                                                    True, self.macan_count, self.uwong_count)
+                if best_move:
+                    row, col = best_move
+                    self.place_piece(row, col, "macan")
+                    self.macan_positions.append((row, col))
+                    self.macan_count += 1
+                    self.turn = "uwong"
+                    self.status_label.config(text="Uwong's turn")
+                    
+                    if self.macan_count == 2:
+                        self.macan_can_move = True
+                        
+            elif self.macan_count == 2:  # Movement phase
                 best_move = self.ai.get_best_move(self.board, self.macan_positions, True)
                 if best_move:
                     old_pos, new_pos = best_move
@@ -310,6 +548,10 @@ class MacananGame:
                         self.capture_uwong(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
                     else:
                         self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                    self.turn = "uwong"
+                    self.status_label.config(text="Uwong's turn")
+        
+        self.redraw_board()
 
     def return_to_menu(self):
         if hasattr(self, 'status_label'):  # Ensure it exists
@@ -386,49 +628,56 @@ class MacananGame:
         if row < 0 or row >= self.board_size or col < 0 or col >= self.board_size:
             return
 
-        if self.macan_can_move:
-            if self.turn == "macan":
-                if self.selected_piece is None:
-                    if self.board[row][col] == "macan":
-                        self.selected_piece = (row, col)
-                        self.highlight_piece(row, col)
-                else:
-                    # Check if the clicked position is the same as the selected piece
-                    if self.selected_piece == (row, col):
-                        # Deselect the piece
-                        self.selected_piece = None
-                        self.redraw_board()
+        if (self.mode == 1 and self.turn == "macan") or \
+        (self.mode == 2 and self.turn == "uwong") or \
+        self.mode == 3:  # 1v1 mode
+            
+            if self.macan_can_move:
+                if self.turn == "macan":
+                    if self.selected_piece is None:
+                        if self.board[row][col] == "macan":
+                            self.selected_piece = (row, col)
+                            self.highlight_piece(row, col)
                     else:
-                        self.handle_macan_movement(row, col)
-            else:  # Uwong's turn
-                if self.board[row][col] is None and self.uwong_count < 8:
-                    self.place_piece(row, col, "uwong")
-                    self.uwong_count += 1
-                    self.turn = "macan"
-                    self.status_label.config(text="Macan's turn")
-                elif self.selected_piece is None and self.board[row][col] == "uwong":
-                    self.selected_piece = (row, col)
-                    self.highlight_piece(row, col)
-                elif self.selected_piece is not None:
-                    # Check if the clicked position is the same as the selected piece
-                    if self.selected_piece == (row, col):
-                        # Deselect the piece
-                        self.selected_piece = None
-                        self.redraw_board()
-                    else:
-                        self.handle_uwong_movement(row, col)
-
-                # Check win conditions
-                if not self.check_macan_has_moves():
-                    messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
-                    self.restart_game()
-        else:
-            self.handle_placement(row, col)
-        
-        if self.mode in [1, 2] and not self.is_ai_turn:
-            self.is_ai_turn = True
-            self.parent.after(500, self.make_ai_move)  # Delay AI move for better UX
-            self.is_ai_turn = False
+                        if self.selected_piece == (row, col):
+                            self.selected_piece = None
+                            self.redraw_board()
+                        else:
+                            old_row, old_col = self.selected_piece
+                            if self.is_valid_move(old_row, old_col, row, col) or \
+                            self.can_capture(old_row, old_col, row, col):
+                                self.handle_macan_movement(row, col)
+                                if self.mode == 1:  # If human is Macan, let AI make its move
+                                    self.parent.after(500, self.make_ai_move)
+                else:  # Uwong's turn
+                    if self.uwong_count < 8:  # Still in placement phase
+                        if self.board[row][col] is None:
+                            self.place_piece(row, col, "uwong")
+                            self.uwong_count += 1
+                            self.turn = "macan"
+                            self.status_label.config(text="Macan's turn")
+                            if self.mode == 2:  # If human is Uwong, let AI make its move
+                                self.parent.after(500, self.make_ai_move)
+                    else:  # Movement phase for Uwong
+                        if self.selected_piece is None:
+                            if self.board[row][col] == "uwong":
+                                self.selected_piece = (row, col)
+                                self.highlight_piece(row, col)
+                        else:
+                            if self.selected_piece == (row, col):
+                                self.selected_piece = None
+                                self.redraw_board()
+                            else:
+                                old_row, old_col = self.selected_piece
+                                if self.is_valid_move(old_row, old_col, row, col):
+                                    self.handle_uwong_movement(row, col)
+                                    if self.mode == 2:  # If human is Uwong, let AI make its move
+                                        self.parent.after(500, self.make_ai_move)
+            else:  # Placement phase
+                self.handle_placement(row, col)
+                if ((self.mode == 1 and self.turn == "uwong") or 
+                    (self.mode == 2 and self.turn == "macan")):
+                    self.parent.after(500, self.make_ai_move)
 
     def can_capture(self, old_row, old_col, new_row, new_col):
         if self.board[new_row][new_col] is not None:
@@ -555,18 +804,20 @@ class MacananGame:
             self.macan_count += 1
             self.turn = "uwong"
             self.status_label.config(text="Uwong's turn to place")
-            
-        elif self.turn == "uwong" and self.uwong_count < 2:
+                
+            # Enable movement phase when Macan placement is complete
+            if self.macan_count == 2:
+                self.macan_can_move = True
+                
+        elif self.turn == "uwong" and self.uwong_count < 8:
             self.place_piece(row, col, "uwong")
             self.uwong_count += 1
-            if self.uwong_count < 2:
+            if self.uwong_count < 8:
                 self.turn = "macan" if self.macan_count < 2 else "uwong"
                 self.status_label.config(text=f"{'Macan' if self.turn == 'macan' else 'Uwong'}'s turn to place")
-        
-        if self.macan_count == 2 and self.uwong_count == 2:
-            self.macan_can_move = True
-            self.turn = "macan"
-            self.status_label.config(text="Macan's turn to move")
+            else:
+                self.turn = "macan"
+                self.status_label.config(text="Macan's turn to move")
 
     def check_macan_has_moves(self):
         """
