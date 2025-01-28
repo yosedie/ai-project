@@ -185,7 +185,6 @@ class MacananAI:
         
         if is_macan_ai:
             # MACAN EVALUATION SECTION
-                    
             for macan_pos in macan_positions:
                 row, col = macan_pos
 
@@ -597,10 +596,21 @@ class MacananAI:
                 col += col_step
 
     def get_best_move(self, board, macan_positions, is_macan_ai):
-        """Get the best move using minimax"""
+        """Get the best move using minimax with capture priority"""
+        # First check for any possible captures
+        for pos in macan_positions:
+            row, col = pos
+            # Check all possible capture directions
+            for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
+                new_row = row + delta[0]
+                new_col = col + delta[1]
+                if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
+                    self.can_capture(board, row, col, new_row, new_col)):
+                    return (pos, (new_row, new_col))
+        
         _, best_move = self.minimax(board, macan_positions, depth=3, 
-                                  alpha=float('-inf'), beta=float('inf'), 
-                                  is_maximizing=True, is_macan_ai=is_macan_ai)
+                                alpha=float('-inf'), beta=float('inf'), 
+                                is_maximizing=True, is_macan_ai=is_macan_ai)
         return best_move
 
 class MainMenu:
