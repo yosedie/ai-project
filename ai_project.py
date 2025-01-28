@@ -767,7 +767,7 @@ class MacananGame:
             
             self.redraw_board()
 
-            if 4 <= self.eaten_uwong <= 8:
+            if 5 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
                 return
@@ -804,7 +804,7 @@ class MacananGame:
             
             self.redraw_board()
 
-            if 4 <= self.eaten_uwong <= 8:
+            if 5 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
                 return
@@ -858,7 +858,7 @@ class MacananGame:
 
         # Check win conditions only after all pieces are placed
         if self.macan_count == 2 and self.uwong_count == 8:
-            if 4 <= self.eaten_uwong <= 8:
+            if 5 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
                 return
@@ -1218,7 +1218,7 @@ class MacananGame:
             self.redraw_board()
 
             # Check eaten_uwong counter
-            if 4 <= self.eaten_uwong <= 8:
+            if 5 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
                 return
