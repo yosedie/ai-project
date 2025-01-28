@@ -11,6 +11,7 @@ class MacananAI:
             (0,3), (2,3), (4,3),  # Row 3
             (1,4), (3,4)  # Row 4
         }
+        self.eaten_uwong = 0
 
     def has_valid_moves(self, board, macan_positions):
         """Check if Macan has any valid moves available"""
@@ -145,13 +146,30 @@ class MacananAI:
         if not self.has_valid_moves(board, macan_positions):
             return -1000  # Uwong wins
             
-        # Otherwise evaluate based on piece count and positions
-        score = (8 - uwong_count) * 10  # Value each remaining Uwong capture
+        score = 0
         
-        # Add positional values
+        # Heavily prioritize capture opportunities
         for pos in macan_positions:
+            row, col = pos
+            # Check for potential captures in all directions
+            for offset in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
+                new_row, new_col = row + offset[0], col + offset[1]
+                if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
+                    self.can_capture(board, row, col, new_row, new_col)):
+                    score += 500  # Very high score for capture opportunity
+        
+        # Base score from piece count
+        score += (8 - uwong_count) * 10
+        
+        # Positional evaluation
+        for pos in macan_positions:
+            # Center control bonus
+            center_distance = abs(pos[0] - 2) + abs(pos[1] - 2)
+            score += (4 - center_distance) * 5
+            
+            # Penalty for restricted positions
             if pos in self.restricted_positions:
-                score -= 5  # Penalty for Macan in restricted position
+                score -= 5
                 
         return score
 
@@ -160,25 +178,29 @@ class MacananAI:
         row, col = pos
         moves = []
         
+        # First check capture moves for Macan
+        if piece_type == "macan":
+            # Check all possible capture directions
+            for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
+                new_row, new_col = row + delta[0], col + delta[1]
+                if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
+                    self.can_capture(board, row, col, new_row, new_col)):
+                    moves.append((new_row, new_col))
+        
         # Regular moves
         if pos in self.restricted_positions:
             directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # 4 directions
         else:
             directions = [(0, 1), (1, 1), (1, 0), (1, -1),   # 8 directions
                         (0, -1), (-1, -1), (-1, 0), (-1, 1)]
-            
+                
         for dr, dc in directions:
             new_row, new_col = row + dr, col + dc
-            if (0 <= new_row < self.board_size and 
-                0 <= new_col < self.board_size and 
+            if (0 <= new_row < len(board) and 
+                0 <= new_col < len(board) and 
                 board[new_row][new_col] is None):
                 moves.append((new_row, new_col))
         
-        # Add capture moves for Macan
-        if piece_type == "macan":
-            capture_moves = self.get_capture_moves(board, pos)
-            moves.extend(capture_moves)
-            
         return moves
 
     def get_capture_moves(self, board, pos):
@@ -216,7 +238,7 @@ class MacananAI:
         if board[new_row][new_col] is not None:
             return False
 
-        # For horizontal captures
+        # Horizontal captures
         if old_row == new_row:
             min_col = min(old_col, new_col)
             max_col = max(old_col, new_col)
@@ -229,9 +251,37 @@ class MacananAI:
                         return False
                 return uwong_count == 2
 
-        # Similar logic for vertical and diagonal captures
-        # [Keep the existing capture logic from the MacananGame class]
-        
+        # Vertical captures
+        elif old_col == new_col:
+            min_row = min(old_row, new_row)
+            max_row = max(old_row, new_row)
+            if max_row - min_row == 3:
+                uwong_count = 0
+                for row in range(min_row + 1, max_row):
+                    if board[row][old_col] == "uwong":
+                        uwong_count += 1
+                    elif board[row][old_col] == "macan":
+                        return False
+                return uwong_count == 2
+
+        # Diagonal captures
+        elif abs(new_row - old_row) == abs(new_col - old_col) == 3:
+            row_step = 1 if new_row > old_row else -1
+            col_step = 1 if new_col > old_col else -1
+            
+            row, col = old_row + row_step, old_col + col_step
+            uwong_count = 0
+            
+            for _ in range(2):
+                if board[row][col] == "uwong":
+                    uwong_count += 1
+                elif board[row][col] == "macan":
+                    return False
+                row += row_step
+                col += col_step
+                
+            return uwong_count == 2
+
         return False
 
     def minimax(self, board, macan_positions, depth, alpha, beta, is_maximizing, is_macan_ai):
@@ -559,11 +609,15 @@ class MacananGame:
                     self.status_label.config(text="Uwong's turn")
         
         self.redraw_board()
+
+        if 4 <= self.eaten_uwong <= 8:
+            messagebox.showinfo("Game Over", "Macan wins!")
+            self.restart_game()
+            return
         
     def make_ai_vs_ai_move(self):
-        # Pastikan peletakan pion selesai sebelum permainan lanjut ke pergerakan
         if self.turn == "macan":
-            if self.macan_count < 2:  # Placement phase for Macan
+            if self.macan_count < 2: 
                 best_move = self.ai.get_best_placement(self.board, self.macan_positions, 
                                                         True, self.macan_count, self.uwong_count)
                 if best_move:
@@ -571,13 +625,17 @@ class MacananGame:
                     self.place_piece(row, col, "macan")
                     self.macan_positions.append((row, col))
                     self.macan_count += 1
-                    self.turn = "uwong"  # Switch to Uwong's turn
-            elif self.macan_count == 2:  # Movement phase for Macan
+                    self.turn = "uwong" 
+            elif self.macan_count == 2:  
                 best_move = self.ai.get_best_move(self.board, self.macan_positions, True)
                 if best_move:
                     old_pos, new_pos = best_move
                     if self.can_capture(old_pos[0], old_pos[1], new_pos[0], new_pos[1]):
                         self.capture_uwong(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
+                        # if 4 <= self.eaten_uwong <= 8:
+                        #     messagebox.showinfo("Game Over", "Macan wins!")
+                        #     self.restart_game()
+                        #     return
                     else:
                         self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
                     self.turn = "uwong"  # Switch to Uwong's turn
@@ -600,19 +658,18 @@ class MacananGame:
 
         self.redraw_board()
 
-        # Jangan periksa kemenangan selama fase peletakan
-        if self.macan_count == 2 and self.uwong_count == 8:  # Setelah semua pion dipasang, baru cek kemenangan
-            # Periksa kondisi akhir permainan
-            if self.count_uwong() < 3:
+        # Check win conditions only after all pieces are placed
+        if self.macan_count == 2 and self.uwong_count == 8:
+            if 4 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
+                return
             elif not self.check_macan_has_moves():
                 messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
                 self.restart_game()
+                return
 
-        # Terus jalankan langkah berikutnya setelah jeda waktu
-        else:
-            self.parent.after(500, self.make_ai_vs_ai_move)
+        self.parent.after(500, self.make_ai_vs_ai_move)
 
     def return_to_menu(self):
         if hasattr(self, 'status_label'):  # Ensure it exists
@@ -673,6 +730,7 @@ class MacananGame:
         self.turn = "macan"
         self.macan_count = 0
         self.uwong_count = 0
+        self.eaten_uwong = 0
         self.macan_positions = []
         self.selected_piece = None
         self.macan_can_move = False
@@ -799,6 +857,7 @@ class MacananGame:
             max_col = max(old_col, new_col)
             for col in range(min_col + 1, max_col):
                 self.board[old_row][col] = None
+            self.eaten_uwong += 2 
 
         # For vertical captures
         elif old_col == new_col:
@@ -806,6 +865,7 @@ class MacananGame:
             max_row = max(old_row, new_row)
             for row in range(min_row + 1, max_row):
                 self.board[row][old_col] = None
+            self.eaten_uwong += 2 
 
         # For diagonal captures
         elif abs(new_row - old_row) == abs(new_col - old_col):
@@ -819,17 +879,18 @@ class MacananGame:
                 self.board[check_row][check_col] = None
                 check_row += row_step
                 check_col += col_step
+            self.eaten_uwong += 2  
 
         # Move the Macan
         self.move_piece(old_row, old_col, new_row, new_col)
 
     def handle_mixed_phase(self, row, col):
         # Check for Macan's available moves at the start of Macan's turn
-        if self.turn == "macan" and not self.selected_piece:
-            if not self.check_macan_has_moves():
-                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
-                self.restart_game()
-                return
+        # if self.turn == "macan" and not self.selected_piece:
+        if not self.check_macan_has_moves():
+            messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+            self.restart_game()
+            return
 
         if self.turn == "macan":
             if self.selected_piece is None:
@@ -954,8 +1015,8 @@ class MacananGame:
             self.selected_piece = None
             self.redraw_board()
 
-            # Check win conditions
-            if self.count_uwong() < 3:
+            # Check eaten_uwong counter
+            if 4 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
             elif not self.check_macan_has_moves():
