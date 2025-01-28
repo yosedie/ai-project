@@ -754,6 +754,17 @@ class MacananGame:
                     self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
                     self.turn = "macan"
                     self.status_label.config(text="Macan's turn")
+            
+            self.redraw_board()
+
+            if 4 <= self.eaten_uwong <= 8:
+                messagebox.showinfo("Game Over", "Macan wins!")
+                self.restart_game()
+                return
+            elif not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
+                return
                     
         elif self.mode == 2:  # AI plays as Macan
             if self.macan_count < 2:  # Placement phase
@@ -780,13 +791,17 @@ class MacananGame:
                         self.move_piece(old_pos[0], old_pos[1], new_pos[0], new_pos[1])
                     self.turn = "uwong"
                     self.status_label.config(text="Uwong's turn")
-        
-        self.redraw_board()
+            
+            self.redraw_board()
 
-        if 4 <= self.eaten_uwong <= 8:
-            messagebox.showinfo("Game Over", "Macan wins!")
-            self.restart_game()
-            return
+            if 4 <= self.eaten_uwong <= 8:
+                messagebox.showinfo("Game Over", "Macan wins!")
+                self.restart_game()
+                return
+            elif not self.check_macan_has_moves():
+                messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
+                self.restart_game()
+                return
         
     def make_ai_vs_ai_move(self):
         if self.turn == "macan":
@@ -912,6 +927,10 @@ class MacananGame:
     def restart_game(self):
         self.reset_game()
         self.redraw_board()
+        
+        # Add automatic AI move for play as Uwong mode after restart
+        if self.mode == 2:  # Playing as Uwong
+            self.parent.after(500, self.make_ai_move)
 
     def handle_click(self, event):
         row = event.y // self.cell_size
@@ -1192,9 +1211,11 @@ class MacananGame:
             if 4 <= self.eaten_uwong <= 8:
                 messagebox.showinfo("Game Over", "Macan wins!")
                 self.restart_game()
+                return
             elif not self.check_macan_has_moves():
                 messagebox.showinfo("Game Over", "Uwong wins! Macan has no valid moves left!")
                 self.restart_game()
+                return
 
     def handle_uwong_movement(self, row, col):
         old_row, old_col = self.selected_piece
