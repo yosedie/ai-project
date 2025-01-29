@@ -42,49 +42,226 @@ class MacananAI:
                 if pos in self.restricted_positions:
                     score -= 3
         else:  # Uwong placement strategy
-            # Extremely high bonus for edge positions
+            uwong_positions = [(i, j) for i in range(self.board_size) 
+                            for j in range(self.board_size) 
+                            if board[i][j] == "uwong"]
+            
+            macan_pos = macan_positions[0]  # Main Macan position
+            
+            # CRITICAL: Check for immediate capture vulnerability during placement
             for pos in uwong_positions:
-                row, col = pos
-                # Huge bonus for left edge positions
-                if col == 0:
-                    score += 800
-                # Bonus for other edges
-                elif col == self.board_size - 1:
-                    score += 400
-                if row == 0 or row == self.board_size - 1:
-                    score += 400
-
-                # Penalize positions that could form a capture line
                 for other_pos in uwong_positions:
                     if other_pos != pos:
-                        # Check if pieces are adjacent
-                        if (abs(pos[0] - other_pos[0]) + abs(pos[1] - other_pos[1])) == 1:
-                            # Heavy penalty for adjacent pieces that could be captured
-                            score -= 500
-
-                # Penalize positions that align with Macan
-                for macan_pos in macan_positions:
-                    # Same row/column/diagonal alignment
-                    if (pos[0] == macan_pos[0] or 
-                        pos[1] == macan_pos[1] or 
-                        abs(pos[0] - macan_pos[0]) == abs(pos[1] - macan_pos[1])):
-                        score -= 200
-
-                # Bonus for positions that block Macan's movement
-                for macan_pos in macan_positions:
-                    if abs(pos[0] - macan_pos[0]) + abs(pos[1] - macan_pos[1]) == 2:
-                        score += 100
+                        # If two Uwongs are adjacent
+                        if ((pos[0] == other_pos[0] and abs(pos[1] - other_pos[1]) == 1) or
+                            (pos[1] == other_pos[1] and abs(pos[0] - other_pos[0]) == 1)):
+                            # Check if Macan is in position to capture
+                            if ((pos[0] == other_pos[0] == macan_pos[0]) or  # Same row
+                                (pos[1] == other_pos[1] == macan_pos[1]) or  # Same column
+                                (abs(pos[0] - macan_pos[0]) == abs(pos[1] - macan_pos[1]) and  # Diagonal
+                                abs(other_pos[0] - macan_pos[0]) == abs(other_pos[1] - macan_pos[1]))):
+                                # Extreme penalty for vulnerable placement
+                                score -= 3000  # Massive penalty to prevent this situation
+            
+            # PRIORITY 1: Encirclement strategy (but only if safe)
+            directions = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+            blocked_directions = 0
+            for dr, dc in directions:
+                check_r = macan_pos[0] + dr
+                check_c = macan_pos[1] + dc
+                if (0 <= check_r < self.board_size and 
+                    0 <= check_c < self.board_size and 
+                    board[check_r][check_c] == "uwong"):
+                    # Only count blocked direction if the Uwong is safe
+                    is_safe = True
+                    for other_pos in uwong_positions:
+                        if (check_r, check_c) != other_pos:
+                            if ((check_r == other_pos[0] and abs(check_c - other_pos[1]) == 1) or
+                                (check_c == other_pos[1] and abs(check_r - other_pos[0]) == 1)):
+                                if ((check_r == macan_pos[0] and other_pos[0] == macan_pos[0]) or
+                                    (check_c == macan_pos[1] and other_pos[1] == macan_pos[1])):
+                                    is_safe = False
+                                    break
+                    if is_safe:
+                        blocked_directions += 1
+            
+            # Bonus for safe encirclement progress
+            score += blocked_directions * 1000
+            
+            # PRIORITY 2: Safe positioning relative to Macan
+            for pos in uwong_positions:
+                # Bonus for safely blocking Macan (not adjacent to other Uwongs)
+                if abs(pos[0] - macan_pos[0]) + abs(pos[1] - macan_pos[1]) == 1:
+                    is_safe_blocking = True
+                    for other_pos in uwong_positions:
+                        if other_pos != pos:
+                            if ((pos[0] == other_pos[0] and abs(pos[1] - other_pos[1]) == 1) or
+                                (pos[1] == other_pos[1] and abs(pos[0] - other_pos[0]) == 1)):
+                                is_safe_blocking = False
+                                break
+                    if is_safe_blocking:
+                        score += 800
+                
+                # Encourage spread-out initial placement
+                min_distance_to_others = float('inf')
+                for other_pos in uwong_positions:
+                    if other_pos != pos:
+                        dist = abs(pos[0] - other_pos[0]) + abs(pos[1] - other_pos[1])
+                        min_distance_to_others = min(min_distance_to_others, dist)
+                if min_distance_to_others >= 2:  # Reward positions not adjacent to other Uwongs
+                    score += 400
+            
+            # PRIORITY 3: Strategic edge positions (if not creating capture vulnerability)
+            for pos in uwong_positions:
+                if pos[1] == 0:  # Left edge
+                    is_safe_edge = True
+                    for other_pos in uwong_positions:
+                        if other_pos != pos and pos[0] == other_pos[0] and abs(pos[1] - other_pos[1]) == 1:
+                            is_safe_edge = False
+                            break
+                    if is_safe_edge:
+                        score += 300
 
         return score
+    
+    def evaluate_board(self, board, macan_positions, is_macan_ai):
+        """
+        Evaluate the current board state with improved Uwong strategy
+        """
+        uwong_count = sum(row.count("uwong") for row in board)
+        
+        # Get all Uwong positions
+        uwong_positions = [(i, j) for i in range(self.board_size) 
+                        for j in range(self.board_size) 
+                        if board[i][j] == "uwong"]
+        
+        # Win/Loss conditions
+        if uwong_count < 3:
+            return 1000  # Macan wins
+        if not self.has_valid_moves(board, macan_positions):
+            return -1000  # Uwong wins
+        
+        if is_macan_ai:
+            # Base score
+            score = 0
 
-    def get_placement_moves(self, board):
-        """Get all possible placement positions"""
-        moves = []
-        for i in range(self.board_size):
-            for j in range(self.board_size):
-                if board[i][j] is None:
-                    moves.append((i, j))
-        return moves
+            # MACAN EVALUATION SECTION
+            for macan_pos in macan_positions:
+                row, col = macan_pos
+
+                # Highest priority - Check if position has 8-direction movement
+                if macan_pos not in self.restricted_positions:
+                    score += 800  # Very high bonus for 8-direction movement position
+                else:
+                    score -= 400  # Heavy penalty for 4-direction movement position
+                
+                # Much heavier penalty for edge positions
+                if row == 0 or row == 4 or col == 0 or col == 4:
+                    score -= 1500  # Significantly increased penalty for being on edge
+                    # Extra penalty for corners which are even worse
+                    if (row == 0 or row == 4) and (col == 0 or col == 4):
+                        score -= 500  # Additional penalty for corners
+
+                # Check for immediate capture opportunities
+                for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
+                    new_row = row + delta[0]
+                    new_col = col + delta[1]
+                    if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
+                        self.can_capture(board, row, col, new_row, new_col)):
+                        # Reduce capture bonus if it requires moving to edge
+                        if new_row == 0 or new_row == 4 or new_col == 0 or new_col == 4:
+                            score += 500  # Reduced reward for edge captures
+                        else:
+                            score += 1000  # Normal capture reward for non-edge positions
+
+                # Check for potential capture setups (two adjacent Uwongs)
+                for uwong1 in uwong_positions:
+                    for uwong2 in uwong_positions:
+                        if uwong1 != uwong2:
+                            if abs(uwong1[0] - uwong2[0]) + abs(uwong1[1] - uwong2[1]) == 1:  # Adjacent Uwongs
+                                if ((uwong1[0] == row and uwong2[0] == row) or  # Same row
+                                    (uwong1[1] == col and uwong2[1] == col) or  # Same column
+                                    (abs(uwong1[0] - row) == abs(uwong1[1] - col) and  # Diagonal
+                                    abs(uwong2[0] - row) == abs(uwong2[1] - col))):
+                                    score += 600  # Good potential for capture
+
+                # Prefer central positions but not as important as 8-direction movement
+                center_dist = abs(row - 2) + abs(col - 2)
+                score += (4 - center_dist) * 50  # Reduced center control bonus
+
+                # Bonus for controlling multiple lines
+                controlled_lines = 0
+                for uwong_pos in uwong_positions:
+                    if (uwong_pos[0] == row or uwong_pos[1] == col or 
+                        abs(uwong_pos[0] - row) == abs(uwong_pos[1] - col)):
+                        controlled_lines += 1
+                score += controlled_lines * 70
+        else :
+            score = 0
+            uwong_positions = [(i, j) for i in range(self.board_size) 
+                            for j in range(self.board_size) 
+                            if board[i][j] == "uwong"]
+            
+            macan_pos = macan_positions[0]
+            uwong_count = len(uwong_positions)
+            
+            # Basic survival score
+            score += uwong_count * 100  # Reduced from 200
+            
+            # MAJOR PRIORITY: Encirclement evaluation
+            directions_blocked = 0
+            potential_moves = []
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    new_r = macan_pos[0] + dr
+                    new_c = macan_pos[1] + dc
+                    if 0 <= new_r < self.board_size and 0 <= new_c < self.board_size:
+                        if board[new_r][new_c] == "uwong":
+                            directions_blocked += 1
+                        else:
+                            potential_moves.append((new_r, new_c))
+            
+            # Massive bonus for successful encirclement
+            score += directions_blocked * 1000  # Increased from 400
+            
+            # Additional bonus for nearly complete encirclement
+            if directions_blocked >= 6:  # If most directions are blocked
+                score += 2000  # Extra bonus to strongly encourage completing the encirclement
+            
+            # Evaluate each Uwong's position
+            for uwong_pos in uwong_positions:
+                # Check only for immediate capture threats
+                in_immediate_danger = False
+                for other_pos in uwong_positions:
+                    if other_pos != uwong_pos:
+                        if ((uwong_pos[0] == macan_pos[0] == other_pos[0] and 
+                            abs(uwong_pos[1] - other_pos[1]) == 1) or
+                            (uwong_pos[1] == macan_pos[1] == other_pos[1] and 
+                            abs(uwong_pos[0] - other_pos[0]) == 1)):
+                            in_immediate_danger = True
+                            break
+                
+                if in_immediate_danger:
+                    score -= 400  # Only moderate penalty for dangerous positions
+                else:
+                    # Major bonus for blocking Macan's movement
+                    if abs(uwong_pos[0] - macan_pos[0]) + abs(uwong_pos[1] - macan_pos[1]) == 1:
+                        score += 800  # Increased from 300
+                    
+                    # Bonus for positions that could block Macan's escape routes
+                    for potential_move in potential_moves:
+                        if abs(uwong_pos[0] - potential_move[0]) + abs(uwong_pos[1] - potential_move[1]) == 1:
+                            score += 400  # Increased from 150
+                
+                # Reduced edge position bonuses
+                if uwong_pos[1] == 0:  # Left edge
+                    score += 100  # Reduced from 250
+                elif uwong_pos[0] in (0, self.board_size-1) or uwong_pos[1] == self.board_size-1:
+                    score += 50  # Reduced from 150
+        
+        return score
 
     def minimax_placement(self, board, macan_positions, depth, alpha, beta, 
                         is_maximizing, is_macan_ai, macan_count, uwong_count):
@@ -154,6 +331,15 @@ class MacananAI:
                     break
                     
             return best_score, best_move
+    
+    def get_placement_moves(self, board):
+        """Get all possible placement positions"""
+        moves = []
+        for i in range(self.board_size):
+            for j in range(self.board_size):
+                if board[i][j] is None:
+                    moves.append((i, j))
+        return moves
 
     def get_best_placement(self, board, macan_positions, is_macan_ai, macan_count, uwong_count):
         """Get the best placement move"""
@@ -162,188 +348,6 @@ class MacananAI:
                                             is_maximizing=True, is_macan_ai=is_macan_ai,
                                             macan_count=macan_count, uwong_count=uwong_count)
         return best_move
-
-    def evaluate_board(self, board, macan_positions, is_macan_ai):
-        """
-        Evaluate the current board state with improved Uwong strategy
-        """
-        uwong_count = sum(row.count("uwong") for row in board)
-        
-        # Get all Uwong positions
-        uwong_positions = [(i, j) for i in range(self.board_size) 
-                        for j in range(self.board_size) 
-                        if board[i][j] == "uwong"]
-        
-        # Base score
-        score = 0
-        
-        # Win/Loss conditions
-        if uwong_count < 3:
-            return 1000  # Macan wins
-        if not self.has_valid_moves(board, macan_positions):
-            return -1000  # Uwong wins
-        
-        if is_macan_ai:
-            # MACAN EVALUATION SECTION
-            for macan_pos in macan_positions:
-                row, col = macan_pos
-
-                # Highest priority - Check if position has 8-direction movement
-                if macan_pos not in self.restricted_positions:
-                    score += 800  # Very high bonus for 8-direction movement position
-                else:
-                    score -= 400  # Heavy penalty for 4-direction movement position
-                
-                # Much heavier penalty for edge positions
-                if row == 0 or row == 4 or col == 0 or col == 4:
-                    score -= 1500  # Significantly increased penalty for being on edge
-                    # Extra penalty for corners which are even worse
-                    if (row == 0 or row == 4) and (col == 0 or col == 4):
-                        score -= 500  # Additional penalty for corners
-
-                # Check for immediate capture opportunities
-                for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
-                    new_row = row + delta[0]
-                    new_col = col + delta[1]
-                    if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
-                        self.can_capture(board, row, col, new_row, new_col)):
-                        # Reduce capture bonus if it requires moving to edge
-                        if new_row == 0 or new_row == 4 or new_col == 0 or new_col == 4:
-                            score += 500  # Reduced reward for edge captures
-                        else:
-                            score += 1000  # Normal capture reward for non-edge positions
-
-                # Check for potential capture setups (two adjacent Uwongs)
-                for uwong1 in uwong_positions:
-                    for uwong2 in uwong_positions:
-                        if uwong1 != uwong2:
-                            if abs(uwong1[0] - uwong2[0]) + abs(uwong1[1] - uwong2[1]) == 1:  # Adjacent Uwongs
-                                if ((uwong1[0] == row and uwong2[0] == row) or  # Same row
-                                    (uwong1[1] == col and uwong2[1] == col) or  # Same column
-                                    (abs(uwong1[0] - row) == abs(uwong1[1] - col) and  # Diagonal
-                                    abs(uwong2[0] - row) == abs(uwong2[1] - col))):
-                                    score += 600  # Good potential for capture
-
-                # Prefer central positions but not as important as 8-direction movement
-                center_dist = abs(row - 2) + abs(col - 2)
-                score += (4 - center_dist) * 50  # Reduced center control bonus
-
-                # Bonus for controlling multiple lines
-                controlled_lines = 0
-                for uwong_pos in uwong_positions:
-                    if (uwong_pos[0] == row or uwong_pos[1] == col or 
-                        abs(uwong_pos[0] - row) == abs(uwong_pos[1] - col)):
-                        controlled_lines += 1
-                score += controlled_lines * 70
-        else :
-            # Heavy penalty for low Uwong count - this discourages moves that could lead to captures
-            score -= (8 - uwong_count) * 200  
-            
-            # Strategic positioning for Uwong
-            for uwong_pos in uwong_positions:
-                # Check if this Uwong is in immediate danger
-                in_danger = False
-                safe_pos = True
-                
-                # Check if Uwong is in potential capture line
-                for macan_pos in macan_positions:
-                    # Horizontal alignment check
-                    if uwong_pos[0] == macan_pos[0]:
-                        score -= 50  # Penalty for being in same row as Macan
-                        # Check if another Uwong is in capture formation
-                        for other_uwong in uwong_positions:
-                            if (other_uwong != uwong_pos and 
-                                other_uwong[0] == uwong_pos[0] and 
-                                abs(other_uwong[1] - uwong_pos[1]) == 1):
-                                score -= 300  # Heavy penalty for capture formation
-                                in_danger = True
-                    
-                    # Vertical alignment check
-                    if uwong_pos[1] == macan_pos[1]:
-                        score -= 50  # Penalty for being in same column as Macan
-                        # Check if another Uwong is in capture formation
-                        for other_uwong in uwong_positions:
-                            if (other_uwong != uwong_pos and 
-                                other_uwong[1] == uwong_pos[1] and 
-                                abs(other_uwong[0] - uwong_pos[0]) == 1):
-                                score -= 300  # Heavy penalty for capture formation
-                                in_danger = True
-                    
-                    # Diagonal alignment check
-                    if abs(uwong_pos[0] - macan_pos[0]) == abs(uwong_pos[1] - macan_pos[1]):
-                        score -= 50  # Penalty for being in diagonal with Macan
-                        # Check if another Uwong is in capture formation
-                        for other_uwong in uwong_positions:
-                            if (other_uwong != uwong_pos and 
-                                abs(other_uwong[0] - uwong_pos[0]) == 1 and 
-                                abs(other_uwong[1] - uwong_pos[1]) == 1):
-                                score -= 300  # Heavy penalty for capture formation
-                                in_danger = True
-                    
-                    # Distance from Macan (prefer staying away but not too far)
-                    dist = abs(uwong_pos[0] - macan_pos[0]) + abs(uwong_pos[1] - macan_pos[1])
-                    if dist < 2:
-                        score -= 100  # Heavy penalty for being too close
-                        safe_pos = False
-                    elif 2 <= dist <= 3:
-                        score += 50  # Good distance
-                    
-                if safe_pos:
-                    score += 100  # Reward for being in safe position
-                
-                if in_danger:
-                    # Look for escape moves
-                    for dr in [-1, 0, 1]:
-                        for dc in [-1, 0, 1]:
-                            new_row = uwong_pos[0] + dr
-                            new_col = uwong_pos[1] + dc
-                            if (0 <= new_row < self.board_size and 
-                                0 <= new_col < self.board_size and 
-                                board[new_row][new_col] is None):
-                                # Check if move would be safe
-                                would_be_safe = True
-                                for macan_pos in macan_positions:
-                                    if (new_row == macan_pos[0] or 
-                                        new_col == macan_pos[1] or 
-                                        abs(new_row - macan_pos[0]) == abs(new_col - macan_pos[1])):
-                                        would_be_safe = False
-                                        break
-                                if would_be_safe:
-                                    score += 200  # Big bonus for having escape route
-                
-                # Bonus for controlling center area
-                if 1 <= uwong_pos[0] <= 3 and 1 <= uwong_pos[1] <= 3:
-                    score += 30
-            
-            # Group formation bonuses
-            for i, uwong1 in enumerate(uwong_positions):
-                allies_nearby = 0
-                for uwong2 in uwong_positions[i+1:]:
-                    dist = abs(uwong1[0] - uwong2[0]) + abs(uwong1[1] - uwong2[1])
-                    if dist == 2:  # Good supporting distance
-                        allies_nearby += 1
-                        score += 40
-                if allies_nearby >= 2:
-                    score += 50  # Extra bonus for having multiple allies nearby
-
-            for i in range(self.board_size):
-                for j in range(self.board_size):
-                    if board[i][j] == "uwong":
-                        # High bonus for being on edge where capture is impossible
-                        if j == 0:  # Leftmost column
-                            score += 300  # Large bonus for left edge - no capture possible from left
-                        elif j == self.board_size - 1:  # Rightmost column
-                            score += 300  # Large bonus for right edge
-                        if i == 0:  # Top row
-                            score += 300  # Large bonus for top edge
-                        elif i == self.board_size - 1:  # Bottom row
-                            score += 300  # Large bonus for bottom edge
-                            
-                        # Extra bonus if no other Uwong is adjacent in edge direction
-                        if j == 0 and (board[i][1] != "uwong"):
-                            score += 200  # Even more bonus for being safe on left edge
-        
-        return score
 
     def get_valid_moves(self, board, pos, piece_type, macan_positions):
         """Return all valid moves for a piece at given position"""
@@ -598,15 +602,16 @@ class MacananAI:
     def get_best_move(self, board, macan_positions, is_macan_ai):
         """Get the best move using minimax with capture priority"""
         # First check for any possible captures
-        for pos in macan_positions:
-            row, col = pos
-            # Check all possible capture directions
-            for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
-                new_row = row + delta[0]
-                new_col = col + delta[1]
-                if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
-                    self.can_capture(board, row, col, new_row, new_col)):
-                    return (pos, (new_row, new_col))
+        if is_macan_ai:
+            for pos in macan_positions:
+                row, col = pos
+                # Check all possible capture directions
+                for delta in [(0, 3), (0, -3), (3, 0), (-3, 0), (3, 3), (-3, -3), (3, -3), (-3, 3)]:
+                    new_row = row + delta[0]
+                    new_col = col + delta[1]
+                    if (0 <= new_row < len(board) and 0 <= new_col < len(board) and
+                        self.can_capture(board, row, col, new_row, new_col)):
+                        return (pos, (new_row, new_col))
         
         _, best_move = self.minimax(board, macan_positions, depth=3, 
                                 alpha=float('-inf'), beta=float('inf'), 
